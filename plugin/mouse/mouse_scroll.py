@@ -5,6 +5,20 @@ from typing import Optional
 from talon import Context, Module, actions, app, cron, ctrl, imgui, settings, ui
 
 hiss_scroll_up = False
+hiss_scroll_timeout = None
+
+
+def cancel_hiss_scroll_timeout():
+    global hiss_scroll_timeout
+    if hiss_scroll_timeout is not None:
+        cron.cancel(hiss_scroll_timeout)
+        hiss_scroll_timeout = None
+
+
+def stop_hiss_scroll():
+    global hiss_scroll_timeout
+    hiss_scroll_timeout = None
+    actions.user.mouse_scroll_stop()
 
 
 class ScrollingDirection(Enum):
@@ -285,6 +299,7 @@ class Actions:
     def mouse_gaze_scroll():
         """Starts gaze scroll"""
 
+        cancel_hiss_scroll_timeout()
         ctx.tags = ["user.continuous_scrolling"]
         scrolling_state.start_gaze_scrolling_job()
 
@@ -300,6 +315,7 @@ class Actions:
 
     def mouse_scroll_stop() -> bool:
         """Stops scrolling"""
+        cancel_hiss_scroll_timeout()
         return_value = False
         ctx.tags = []
 
@@ -342,12 +358,15 @@ class Actions:
 @ctx.action_class("user")
 class UserActions:
     def noise_trigger_hiss(active: bool):
+        global hiss_scroll_timeout
         if settings.get("user.mouse_enable_hiss_scroll"):
             if active:
                 if hiss_scroll_up:
                     actions.user.mouse_scroll_up_continuous()
                 else:
                     actions.user.mouse_scroll_down_continuous()
+                cancel_hiss_scroll_timeout()
+                hiss_scroll_timeout = cron.after("5m", stop_hiss_scroll)
             else:
                 actions.user.mouse_scroll_stop()
 
@@ -356,6 +375,7 @@ def mouse_scroll_continuous(
     new_scroll_dir: ScrollingDirection,
     speed_factor: Optional[int] = None,
 ):
+    cancel_hiss_scroll_timeout()
     actions.user.mouse_scroll_set_speed(speed_factor)
     current_direction = scrolling_state.scroller
 
